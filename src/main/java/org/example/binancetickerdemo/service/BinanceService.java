@@ -3,6 +3,7 @@ package org.example.binancetickerdemo.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.*;
+import org.example.binancetickerdemo.websocket.PriceWebSocketHandler;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
@@ -16,19 +17,34 @@ public class BinanceService extends WebSocketListener {
 
     private final OkHttpClient client;
     private final PriceCache priceCache;
+    private final PriceWebSocketHandler webSocketHandler;
     private final ObjectMapper objectMapper;
 
     private WebSocket webSocket;
 
-    public BinanceService(PriceCache priceCache) {
+    public BinanceService(PriceCache priceCache, PriceWebSocketHandler webSocketHandler) {
         this.client = new OkHttpClient();
         this.priceCache = priceCache;
+        this.webSocketHandler = webSocketHandler;
         this.objectMapper = new ObjectMapper();
     }
 
+    private static final List<String> DEFAULT_SYMBOLS = List.of(
+            "btcusdt", "ethusdt", "bnbusdt", "solusdt", "xrpusdt",
+            "dogeusdt", "adausdt", "avaxusdt", "dotusdt", "maticusdt",
+            "linkusdt", "ltcusdt", "atomusdt", "uniusdt", "etcusdt",
+            "xlmusdt", "aptusdt", "nearusdt", "filusdt", "arbusdt",
+            "opusdt", "injusdt", "suiusdt", "seiusdt", "tiausdt",
+            "runeusdt", "fetusdt", "wldusdt", "stxusdt", "imxusdt",
+            "renderusdt", "grtusdt", "aaveusdt", "mkrusdt", "snxusdt",
+            "ldousdt", "pendleusdt", "jupusdt", "wusdt", "enausdt",
+            "pepeusdt", "shibusdt", "flokiusdt", "bonkusdt", "wifusdt",
+            "ordiusdt", "1000satsusdt", "bomeusdt", "memeusdt", "notusdt"
+    );
+
     @PostConstruct
     public void init() {
-        subscribeToSymbols(List.of("btcusdt", "ethusdt"));
+        subscribeToSymbols(DEFAULT_SYMBOLS);
     }
 
     public void subscribeToSymbols(List<String> symbols) {
@@ -67,9 +83,15 @@ public class BinanceService extends WebSocketListener {
 
             String symbol = data.get("s").asText();
             BigDecimal price = new BigDecimal(data.get("p").asText());
+            long binanceTime = data.get("T").asLong();
+            long now = System.currentTimeMillis();
+
+            long latency = now - binanceTime;
+
+            System.out.println("Latency : " + latency);
 
             priceCache.updatePrice(symbol, price);
-            System.out.println("Updated " + symbol + ": " + price);
+            webSocketHandler.broadcastPrice(symbol, price, binanceTime);
         } catch (Exception e) {
             System.err.println("Error parsing message: " + e.getMessage());
         }
